@@ -6,7 +6,6 @@ type Streak = {
   name: string;
   startDate: string; // ISO date string from API
   endDate: string;   // ISO date string from API
-  // createdAt/updatedAt exist too, but we don't need them here
 };
 
 type Props = {
@@ -33,34 +32,28 @@ export default function StreaksListView({ userId, onSelectStreak }: Props) {
     }
   }
 
-  async function load() {
+  async function load(opts?: { signal?: AbortSignal }) {
     setLoading(true);
     setError(null);
-    const ac = new AbortController();
     try {
-      const res = await fetch(`${API_URL}/streaks?userId=${encodeURIComponent(userId)}`, {
-        signal: ac.signal,
-      });
-      if (!res.ok) {
-        throw new Error(`Failed to load streaks (${res.status})`);
-      }
+      const res = await fetch(
+        `${API_URL}/streaks?userId=${encodeURIComponent(userId)}`,
+        { signal: opts?.signal }
+      );
+      if (!res.ok) throw new Error(`Failed to load streaks (${res.status})`);
       const data = (await res.json()) as Streak[];
       setStreaks(data);
     } catch (e: any) {
-      if (e.name !== "AbortError") setError(e.message || "Failed to load");
+      if (e?.name !== "AbortError") setError(e?.message || "Failed to load");
     } finally {
       setLoading(false);
     }
-    return () => ac.abort();
   }
 
   useEffect(() => {
-    const cancel = load();
-    return () => {
-      // @ts-expect-error cleanup from load()
-      typeof cancel === "function" && cancel();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const controller = new AbortController();
+    void load({ signal: controller.signal });
+    return () => controller.abort();
   }, [userId]);
 
   return (
@@ -69,7 +62,7 @@ export default function StreaksListView({ userId, onSelectStreak }: Props) {
         <h1 className="text-2xl font-semibold">Streaks</h1>
         <button
           className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-50"
-          onClick={load}
+          onClick={() => { void load(); }} // wrap to avoid passing the click event as "signal"
         >
           Refresh
         </button>
